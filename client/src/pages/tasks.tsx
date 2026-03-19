@@ -1,16 +1,13 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2, GripVertical } from "lucide-react";
-import type { Task, Project } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Plus, Trash2 } from "lucide-react";
+import { useData, type Task } from "@/lib/data-context";
 import { useToast } from "@/hooks/use-toast";
 
 const statusColumns = [
@@ -26,7 +23,8 @@ const priorityColors: Record<string, string> = {
   low: "outline",
 };
 
-function TaskCard({ task, projects, onStatusChange, onDelete }: { task: Task; projects: Project[]; onStatusChange: (id: number, status: string) => void; onDelete: (id: number) => void }) {
+function TaskCard({ task, onStatusChange, onDelete }: { task: Task; onStatusChange: (id: number, status: string) => void; onDelete: (id: number) => void }) {
+  const { projects } = useData();
   const project = projects.find(p => p.id === task.projectId);
   return (
     <div className="rounded-md border bg-card p-3 space-y-2 group" data-testid={`task-card-${task.id}`}>
@@ -72,6 +70,7 @@ function TaskCard({ task, projects, onStatusChange, onDelete }: { task: Task; pr
 
 export default function Tasks() {
   const { toast } = useToast();
+  const { tasks, projects, addTask, updateTask, deleteTask } = useData();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -79,71 +78,27 @@ export default function Tasks() {
   const [projectId, setProjectId] = useState<string>("");
   const [dueDate, setDueDate] = useState("");
 
-  const { data: tasks, isLoading: tasksLoading } = useQuery<Task[]>({ queryKey: ["/api/tasks"] });
-  const { data: projects } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
-
-  const createMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/tasks", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      setTitle(""); setDescription(""); setPriority("medium"); setProjectId(""); setDueDate("");
-      setOpen(false);
-      toast({ title: "Task created" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
-      const res = await apiRequest("PATCH", `/api/tasks/${id}`, data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/tasks/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
-      toast({ title: "Task deleted" });
-    },
-  });
-
   const handleCreate = () => {
     if (!title.trim()) return;
-    createMutation.mutate({
+    addTask({
       title: title.trim(),
       description: description.trim() || null,
       priority,
-      projectId: projectId ? parseInt(projectId) : null,
+      projectId: projectId && projectId !== "none" ? parseInt(projectId) : null,
       dueDate: dueDate || null,
       status: "todo",
     });
+    setTitle(""); setDescription(""); setPriority("medium"); setProjectId(""); setDueDate("");
+    setOpen(false);
+    toast({ title: "Task created" });
   };
-
-  if (tasksLoading) {
-    return (
-      <div className="p-6 space-y-6">
-        <Skeleton className="h-7 w-32" />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-64 rounded-lg" />)}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto h-full">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight" data-testid="text-page-title">Tasks</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{tasks?.length ?? 0} total tasks</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{tasks.length} total tasks</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -157,24 +112,11 @@ export default function Tasks() {
               <DialogTitle>New Task</DialogTitle>
             </DialogHeader>
             <div className="space-y-3 pt-2">
-              <Input
-                placeholder="Task title"
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                data-testid="input-task-title"
-              />
-              <Textarea
-                placeholder="Description (optional)"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                className="min-h-[80px]"
-                data-testid="input-task-description"
-              />
+              <Input placeholder="Task title" value={title} onChange={e => setTitle(e.target.value)} data-testid="input-task-title" />
+              <Textarea placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} className="min-h-[80px]" data-testid="input-task-description" />
               <div className="grid grid-cols-2 gap-3">
                 <Select value={priority} onValueChange={setPriority}>
-                  <SelectTrigger data-testid="select-priority">
-                    <SelectValue placeholder="Priority" />
-                  </SelectTrigger>
+                  <SelectTrigger data-testid="select-priority"><SelectValue placeholder="Priority" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="low">Low</SelectItem>
                     <SelectItem value="medium">Medium</SelectItem>
@@ -183,30 +125,18 @@ export default function Tasks() {
                   </SelectContent>
                 </Select>
                 <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger data-testid="select-project">
-                    <SelectValue placeholder="Project" />
-                  </SelectTrigger>
+                  <SelectTrigger data-testid="select-project"><SelectValue placeholder="Project" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No Project</SelectItem>
-                    {projects?.map(p => (
+                    {projects.map(p => (
                       <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <Input
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                data-testid="input-due-date"
-              />
-              <Button
-                onClick={handleCreate}
-                disabled={!title.trim() || createMutation.isPending}
-                className="w-full"
-                data-testid="button-submit-task"
-              >
-                {createMutation.isPending ? "Creating..." : "Create Task"}
+              <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} data-testid="input-due-date" />
+              <Button onClick={handleCreate} disabled={!title.trim()} className="w-full" data-testid="button-submit-task">
+                Create Task
               </Button>
             </div>
           </DialogContent>
@@ -215,7 +145,7 @@ export default function Tasks() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {statusColumns.map(col => {
-          const columnTasks = tasks?.filter(t => t.status === col.key) ?? [];
+          const columnTasks = tasks.filter(t => t.status === col.key);
           return (
             <div key={col.key} className="space-y-3">
               <div className="flex items-center gap-2">
@@ -227,9 +157,8 @@ export default function Tasks() {
                   <TaskCard
                     key={task.id}
                     task={task}
-                    projects={projects ?? []}
-                    onStatusChange={(id, status) => updateMutation.mutate({ id, data: { status } })}
-                    onDelete={(id) => deleteMutation.mutate(id)}
+                    onStatusChange={(id, status) => updateTask(id, { status })}
+                    onDelete={(id) => { deleteTask(id); toast({ title: "Task deleted" }); }}
                   />
                 ))}
                 {columnTasks.length === 0 && (

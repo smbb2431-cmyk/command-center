@@ -1,11 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { CheckSquare, FolderKanban, Bot, AlertTriangle, TrendingUp, Clock } from "lucide-react";
-import type { Task, Project, Agent } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
+import { useData } from "@/lib/data-context";
 
 function KpiCard({ title, value, subtitle, icon: Icon, color }: { title: string; value: string | number; subtitle: string; icon: any; color: string }) {
   return (
@@ -27,32 +24,14 @@ function KpiCard({ title, value, subtitle, icon: Icon, color }: { title: string;
 }
 
 export default function Overview() {
-  const { data: tasks, isLoading: tasksLoading } = useQuery<Task[]>({ queryKey: ["/api/tasks"] });
-  const { data: projects, isLoading: projectsLoading } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
-  const { data: agents, isLoading: agentsLoading } = useQuery<Agent[]>({ queryKey: ["/api/agents"] });
+  const { tasks, projects, agents } = useData();
 
-  const isLoading = tasksLoading || projectsLoading || agentsLoading;
-
-  if (isLoading) {
-    return (
-      <div className="p-6 space-y-6">
-        <div><Skeleton className="h-7 w-40" /></div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-64 rounded-lg" />)}
-        </div>
-      </div>
-    );
-  }
-
-  const todoCount = tasks?.filter(t => t.status === "todo").length ?? 0;
-  const inProgressCount = tasks?.filter(t => t.status === "in-progress").length ?? 0;
-  const doneCount = tasks?.filter(t => t.status === "done").length ?? 0;
-  const urgentCount = tasks?.filter(t => t.priority === "urgent" || t.priority === "high").length ?? 0;
-  const activeProjects = projects?.filter(p => p.status === "active").length ?? 0;
-  const runningAgents = agents?.filter(a => a.status === "running").length ?? 0;
+  const todoCount = tasks.filter(t => t.status === "todo").length;
+  const inProgressCount = tasks.filter(t => t.status === "in-progress").length;
+  const doneCount = tasks.filter(t => t.status === "done").length;
+  const urgentCount = tasks.filter(t => t.priority === "urgent" || t.priority === "high").length;
+  const activeProjects = projects.filter(p => p.status === "active").length;
+  const runningAgents = agents.filter(a => a.status === "running").length;
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto h-full">
@@ -63,13 +42,12 @@ export default function Overview() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard title="Open Tasks" value={todoCount + inProgressCount} subtitle={`${doneCount} completed`} icon={CheckSquare} color="bg-[hsl(188,70%,30%)]" />
-        <KpiCard title="Active Projects" value={activeProjects} subtitle={`${projects?.length ?? 0} total`} icon={FolderKanban} color="bg-[hsl(262,45%,50%)]" />
-        <KpiCard title="Agents Running" value={runningAgents} subtitle={`${agents?.length ?? 0} total`} icon={Bot} color="bg-[hsl(160,50%,40%)]" />
+        <KpiCard title="Active Projects" value={activeProjects} subtitle={`${projects.length} total`} icon={FolderKanban} color="bg-[hsl(262,45%,50%)]" />
+        <KpiCard title="Agents Running" value={runningAgents} subtitle={`${agents.length} total`} icon={Bot} color="bg-[hsl(160,50%,40%)]" />
         <KpiCard title="Urgent Items" value={urgentCount} subtitle="Need attention" icon={AlertTriangle} color="bg-[hsl(35,80%,52%)]" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Recent Tasks */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -78,7 +56,7 @@ export default function Overview() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {tasks?.slice(0, 5).map(task => (
+            {tasks.slice(0, 5).map(task => (
               <div key={task.id} className="flex items-center justify-between gap-2" data-testid={`task-row-${task.id}`}>
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{task.title}</p>
@@ -94,13 +72,12 @@ export default function Overview() {
                 </div>
               </div>
             ))}
-            {(!tasks || tasks.length === 0) && (
+            {tasks.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">No tasks yet. Create your first task to get started.</p>
             )}
           </CardContent>
         </Card>
 
-        {/* Project Progress */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -109,7 +86,7 @@ export default function Overview() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {projects?.map(project => (
+            {projects.map(project => (
               <div key={project.id} className="space-y-1.5" data-testid={`project-progress-${project.id}`}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium truncate">{project.name}</p>
@@ -123,14 +100,13 @@ export default function Overview() {
                 </div>
               </div>
             ))}
-            {(!projects || projects.length === 0) && (
+            {projects.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">No projects yet.</p>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Agent Status */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -140,7 +116,7 @@ export default function Overview() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {agents?.map(agent => (
+            {agents.map(agent => (
               <div key={agent.id} className="rounded-md border p-3 space-y-2" data-testid={`agent-card-${agent.id}`}>
                 <div className="flex items-center justify-between gap-1">
                   <p className="text-sm font-medium truncate">{agent.name}</p>

@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { Switch, Route, Router } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { DataProvider } from "@/lib/data-context";
 import NotFound from "@/pages/not-found";
 import Overview from "@/pages/overview";
 import Tasks from "@/pages/tasks";
@@ -40,7 +39,7 @@ export default function App() {
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <DataProvider>
       <TooltipProvider>
         <Router hook={useHashLocation}>
           <SidebarProvider style={style as React.CSSProperties}>
@@ -59,6 +58,6 @@ export default function App() {
         </Router>
         <Toaster />
       </TooltipProvider>
-    </QueryClientProvider>
+    </DataProvider>
   );
 }

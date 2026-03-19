@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,10 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Trash2, Pencil } from "lucide-react";
-import type { Project, Task } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useData, type Project } from "@/lib/data-context";
 import { useToast } from "@/hooks/use-toast";
 
 const colors = [
@@ -26,6 +23,7 @@ const colors = [
 
 export default function Projects() {
   const { toast } = useToast();
+  const { projects, tasks, addProject, updateProject, deleteProject } = useData();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState("");
@@ -33,43 +31,6 @@ export default function Projects() {
   const [status, setStatus] = useState("active");
   const [progress, setProgress] = useState(0);
   const [color, setColor] = useState("#0e7490");
-
-  const { data: projects, isLoading } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
-  const { data: tasks } = useQuery<Task[]>({ queryKey: ["/api/tasks"] });
-
-  const createMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/projects", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      resetForm();
-      toast({ title: "Project created" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
-      const res = await apiRequest("PATCH", `/api/projects/${id}`, data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      resetForm();
-      toast({ title: "Project updated" });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/projects/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Project deleted" });
-    },
-  });
 
   function resetForm() {
     setName(""); setDescription(""); setStatus("active"); setProgress(0); setColor("#0e7490");
@@ -90,21 +51,13 @@ export default function Projects() {
     if (!name.trim()) return;
     const data = { name: name.trim(), description: description.trim() || null, status, progress, color };
     if (editingId) {
-      updateMutation.mutate({ id: editingId, data });
+      updateProject(editingId, data);
+      toast({ title: "Project updated" });
     } else {
-      createMutation.mutate(data);
+      addProject(data);
+      toast({ title: "Project created" });
     }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="p-6 space-y-6">
-        <Skeleton className="h-7 w-36" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-48 rounded-lg" />)}
-        </div>
-      </div>
-    );
+    resetForm();
   }
 
   return (
@@ -112,7 +65,7 @@ export default function Projects() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight" data-testid="text-page-title">Projects</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{projects?.length ?? 0} projects</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{projects.length} projects</p>
         </div>
         <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); setOpen(v); }}>
           <DialogTrigger asChild>
@@ -126,24 +79,11 @@ export default function Projects() {
               <DialogTitle>{editingId ? "Edit Project" : "New Project"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3 pt-2">
-              <Input
-                placeholder="Project name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                data-testid="input-project-name"
-              />
-              <Textarea
-                placeholder="Description (optional)"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                className="min-h-[80px]"
-                data-testid="input-project-description"
-              />
+              <Input placeholder="Project name" value={name} onChange={e => setName(e.target.value)} data-testid="input-project-name" />
+              <Textarea placeholder="Description (optional)" value={description} onChange={e => setDescription(e.target.value)} className="min-h-[80px]" data-testid="input-project-description" />
               <div className="grid grid-cols-2 gap-3">
                 <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger data-testid="select-project-status">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
+                  <SelectTrigger data-testid="select-project-status"><SelectValue placeholder="Status" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="on-hold">On Hold</SelectItem>
@@ -151,9 +91,7 @@ export default function Projects() {
                   </SelectContent>
                 </Select>
                 <Select value={color} onValueChange={setColor}>
-                  <SelectTrigger data-testid="select-project-color">
-                    <SelectValue placeholder="Color" />
-                  </SelectTrigger>
+                  <SelectTrigger data-testid="select-project-color"><SelectValue placeholder="Color" /></SelectTrigger>
                   <SelectContent>
                     {colors.map(c => (
                       <SelectItem key={c.value} value={c.value}>
@@ -171,22 +109,10 @@ export default function Projects() {
                   <label className="text-sm font-medium">Progress</label>
                   <span className="text-xs text-muted-foreground tabular-nums">{progress}%</span>
                 </div>
-                <Slider
-                  value={[progress]}
-                  onValueChange={([v]) => setProgress(v)}
-                  min={0}
-                  max={100}
-                  step={5}
-                  data-testid="slider-progress"
-                />
+                <Slider value={[progress]} onValueChange={([v]) => setProgress(v)} min={0} max={100} step={5} data-testid="slider-progress" />
               </div>
-              <Button
-                onClick={handleSubmit}
-                disabled={!name.trim() || createMutation.isPending || updateMutation.isPending}
-                className="w-full"
-                data-testid="button-submit-project"
-              >
-                {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingId ? "Update Project" : "Create Project"}
+              <Button onClick={handleSubmit} disabled={!name.trim()} className="w-full" data-testid="button-submit-project">
+                {editingId ? "Update Project" : "Create Project"}
               </Button>
             </div>
           </DialogContent>
@@ -194,8 +120,8 @@ export default function Projects() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {projects?.map(project => {
-          const projectTasks = tasks?.filter(t => t.projectId === project.id) ?? [];
+        {projects.map(project => {
+          const projectTasks = tasks.filter(t => t.projectId === project.id);
           const doneTasks = projectTasks.filter(t => t.status === "done").length;
           return (
             <Card key={project.id} className="group" data-testid={`project-card-${project.id}`}>
@@ -206,27 +132,17 @@ export default function Projects() {
                     <CardTitle className="text-sm font-medium truncate">{project.name}</CardTitle>
                   </div>
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button
-                      onClick={() => startEdit(project)}
-                      className="p-1 text-muted-foreground hover:text-foreground"
-                      data-testid={`button-edit-project-${project.id}`}
-                    >
+                    <button onClick={() => startEdit(project)} className="p-1 text-muted-foreground hover:text-foreground" data-testid={`button-edit-project-${project.id}`}>
                       <Pencil className="size-3.5" />
                     </button>
-                    <button
-                      onClick={() => deleteMutation.mutate(project.id)}
-                      className="p-1 text-muted-foreground hover:text-destructive"
-                      data-testid={`button-delete-project-${project.id}`}
-                    >
+                    <button onClick={() => { deleteProject(project.id); toast({ title: "Project deleted" }); }} className="p-1 text-muted-foreground hover:text-destructive" data-testid={`button-delete-project-${project.id}`}>
                       <Trash2 className="size-3.5" />
                     </button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                {project.description && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
-                )}
+                {project.description && <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Progress</span>
@@ -244,7 +160,7 @@ export default function Projects() {
             </Card>
           );
         })}
-        {(!projects || projects.length === 0) && (
+        {projects.length === 0 && (
           <div className="col-span-full text-center py-12">
             <p className="text-sm text-muted-foreground">No projects yet. Create your first project to get started.</p>
           </div>

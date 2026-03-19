@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 
 // Types
 export interface Project {
@@ -79,12 +79,43 @@ export function useData() {
   return ctx;
 }
 
-let nextId = 100;
+const STORAGE_KEY = "command-center-data";
+
+function loadFromStorage<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed[key] ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function loadNextId(): number {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return 100;
+    const parsed = JSON.parse(raw);
+    return parsed._nextId ?? 100;
+  } catch {
+    return 100;
+  }
+}
+
+let nextId = loadNextId();
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>(seedProjects);
-  const [tasks, setTasks] = useState<Task[]>(seedTasks);
-  const [agents, setAgents] = useState<Agent[]>(seedAgents);
+  const [projects, setProjects] = useState<Project[]>(() => loadFromStorage("projects", seedProjects));
+  const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage("tasks", seedTasks));
+  const [agents, setAgents] = useState<Agent[]>(() => loadFromStorage("agents", seedAgents));
+
+  // Persist to localStorage on every change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, tasks, agents, _nextId: nextId }));
+    } catch { /* storage full — silently skip */ }
+  }, [projects, tasks, agents]);
 
   const addProject = useCallback((p: Omit<Project, "id">) => {
     setProjects(prev => [...prev, { ...p, id: nextId++ }]);
